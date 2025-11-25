@@ -2,16 +2,16 @@
 setlocal
 
 rem ================================================================
-rem Build RS485 Serial Tool from main.py (PyQt5 version)
-rem Uses Nuitka for optimal performance and AV compatibility
+rem Build RS485 Serial Tool using PyInstaller (alternative to Nuitka)
+rem PyInstaller is easier to use but may have slightly higher AV detection
 rem ================================================================
 
 set "SCRIPT_DIR=%~dp0"
 set "ENTRY_POINT=%SCRIPT_DIR%main.py"
-set "OUTPUT_NAME=RS485_Modbus_Tool.exe"
+set "OUTPUT_NAME=RS485_Modbus_Tool"
 
 echo ================================================================
-echo RS485 Serial Communication Tool - Build Script
+echo RS485 Serial Communication Tool - PyInstaller Build
 echo ================================================================
 echo.
 
@@ -40,11 +40,11 @@ if %ERRORLEVEL% neq 0 (
   exit /b 1
 )
 
-rem Check if Nuitka is installed
-python -m nuitka --version >nul 2>&1
+rem Check if PyInstaller is installed
+python -c "import PyInstaller" 2>nul
 if %ERRORLEVEL% neq 0 (
-  echo [ERROR] Nuitka is not installed.
-  echo Please install it first: pip install nuitka
+  echo [ERROR] PyInstaller is not installed.
+  echo Please install it first: pip install pyinstaller
   pause
   exit /b 1
 )
@@ -52,11 +52,9 @@ if %ERRORLEVEL% neq 0 (
 pushd "%SCRIPT_DIR%" >nul
 
 echo Cleaning previous build outputs...
-rem Clean previous Nuitka outputs
+rem Clean previous PyInstaller outputs
 for %%d in (
-  "main.build" "main.dist" "main.onefile-build"
-  "RS485_Modbus_Tool.build" "RS485_Modbus_Tool.dist"
-  "Modbus download.build" "Modbus download.dist"
+  "build" "dist" "__pycache__"
 ) do (
   if exist "%%~d" (
     echo   Removing %%~d
@@ -64,33 +62,25 @@ for %%d in (
   )
 )
 
-if exist "%OUTPUT_NAME%" (
-  echo   Removing old %OUTPUT_NAME%
-  del /f /q "%OUTPUT_NAME%"
-)
-if exist "Modbus download.exe" (
-  echo   Removing old "Modbus download.exe"
-  del /f /q "Modbus download.exe"
+if exist "%OUTPUT_NAME%.spec" (
+  echo   Removing old spec file
+  del /f /q "%OUTPUT_NAME%.spec"
 )
 
 echo.
-echo Building with Nuitka...
-echo This may take several minutes on first build...
+echo Building with PyInstaller...
+echo This may take a few minutes...
 echo.
 
-python -m nuitka ^
+rem PyInstaller build with options to reduce AV detection
+pyinstaller ^
   --onefile ^
-  --windows-console-mode=attach ^
-  --enable-plugin=pyqt5 ^
-  --assume-yes-for-downloads ^
-  --company-name="Industrial Automation Tool" ^
-  --product-name="RS485 Serial Communication Tool" ^
-  --file-version=1.0.1.0 ^
-  --product-version=1.0.1 ^
-  --file-description="RS485 Modbus Serial Testing Tool - NOT malware" ^
-  --output-filename="%OUTPUT_NAME%" ^
-  --msvc=latest ^
-  --nofollow-import-to=tkinter ^
+  --console ^
+  --name="%OUTPUT_NAME%" ^
+  --noupx ^
+  --clean ^
+  --noconfirm ^
+  --add-data "README.md;." ^
   main.py
 
 set "BUILD_RESULT=%ERRORLEVEL%"
@@ -104,17 +94,30 @@ if %BUILD_RESULT% neq 0 (
   exit /b %BUILD_RESULT%
 )
 
+rem Move executable to root directory
+if exist "dist\%OUTPUT_NAME%.exe" (
+  echo.
+  echo Moving executable to root directory...
+  move /y "dist\%OUTPUT_NAME%.exe" "%SCRIPT_DIR%" >nul
+)
+
 echo.
 echo ================================================================
 echo Build SUCCESS!
 echo ================================================================
 echo.
-echo Output: "%SCRIPT_DIR%%OUTPUT_NAME%"
+echo Output: "%SCRIPT_DIR%%OUTPUT_NAME%.exe"
 echo.
-echo To reduce antivirus false positives:
-echo 1. Code sign the executable if possible
-echo 2. Submit to antivirus vendors as false positive
-echo 3. Distribute with source code and README
+echo IMPORTANT: To minimize antivirus false positives:
+echo - This build uses --console to show transparency
+echo - UPX compression is disabled (--noupx)
+echo - Consider code signing the executable
+echo - Submit false positives to AV vendors
+echo.
+echo Cleaning up build folders...
+rmdir /s /q "build" 2>nul
+rmdir /s /q "dist" 2>nul
+echo Done!
 echo.
 popd
 pause

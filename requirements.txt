@@ -1,0 +1,6 @@
+# Requirements for RS485 Serial Communication Tool
+# This is a legitimate industrial automation testing application
+
+# Core dependencies
+pyserial>=3.4
+PyQt5>=5.15.0

@@ -1,0 +1,12 @@
+# Requirements for building RS485 Serial Communication Tool
+
+# Runtime dependencies
+pyserial>=3.4
+PyQt5>=5.15.0
+
+# Build tools (choose one)
+nuitka>=1.5.0        # Recommended - better AV compatibility
+# pyinstaller>=5.0    # Alternative - easier to use
+
+# Optional: For code signing on Windows
+# pywin32>=300
