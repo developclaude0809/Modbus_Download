@@ -82,9 +82,10 @@ class RS485SerialToolWindow(QMainWindow):
         self.reply_received: bool = False
         self.validation_failed: bool = False
         self.auto_send_running: bool = False
+        self.is_step_mode: bool = False
 
-        # Reply timeout（用 singleShot）
-        # 單次排程就好，不需要一直開 timer
+        # Reply timeout timer - store reference so we can cancel it
+        self.reply_timeout_timer: Optional[QTimer] = None
 
         self._build_ui()
         self.refresh_ports()
@@ -670,9 +671,14 @@ class RS485SerialToolWindow(QMainWindow):
             self.waiting_for_reply = True
             self.reply_received = False
             self.validation_failed = False
+            self.is_step_mode = True
             self.step_send_btn.setEnabled(False)
 
-            QTimer.singleShot(2000, lambda: self.check_reply_timeout(is_step=True))
+            # Store timer reference so we can cancel it when reply arrives
+            self.reply_timeout_timer = QTimer()
+            self.reply_timeout_timer.setSingleShot(True)
+            self.reply_timeout_timer.timeout.connect(self.check_reply_timeout)
+            self.reply_timeout_timer.start(2000)
 
     def auto_send(self):
         if not self.file_segments:
@@ -705,7 +711,13 @@ class RS485SerialToolWindow(QMainWindow):
             self.waiting_for_reply = True
             self.reply_received = False
             self.validation_failed = False
-            QTimer.singleShot(2000, lambda: self.check_reply_timeout(is_step=False))
+            self.is_step_mode = False
+
+            # Store timer reference so we can cancel it when reply arrives
+            self.reply_timeout_timer = QTimer()
+            self.reply_timeout_timer.setSingleShot(True)
+            self.reply_timeout_timer.timeout.connect(self.check_reply_timeout)
+            self.reply_timeout_timer.start(2000)
         else:
             self.stop_auto_send()
 
@@ -763,44 +775,56 @@ class RS485SerialToolWindow(QMainWindow):
             self.log_message(f"Send error: {e}", "error")
             return False
 
-    def check_reply_timeout(self, is_step: bool):
-        if self.reply_received:
-            # 成功收到 / 驗證 OK
-            self.current_segment_index += 1
+    def process_successful_reply(self):
+        """Process a successful reply after 100ms delay"""
+        # Move to next segment
+        self.current_segment_index += 1
 
-            if self.current_segment_index < len(self.file_segments):
-                self.segment_edit.setPlainText(self.file_segments[self.current_segment_index])
-                total = len(self.file_segments)
-                self.progress_label.setText(
-                    f"Segment {self.current_segment_index + 1} / {total}"
-                )
-                self.update_block_length_display()
+        if self.current_segment_index < len(self.file_segments):
+            self.segment_edit.setPlainText(self.file_segments[self.current_segment_index])
+            total = len(self.file_segments)
+            self.progress_label.setText(
+                f"Segment {self.current_segment_index + 1} / {total}"
+            )
+            self.update_block_length_display()
 
-                if not is_step:
-                    QTimer.singleShot(100, self.send_next_in_auto_mode)
-                else:
-                    self.step_send_btn.setEnabled(True)
+            if not self.is_step_mode:
+                # Auto mode: send next segment immediately
+                self.waiting_for_reply = False
+                self.send_next_in_auto_mode()
             else:
-                total = len(self.file_segments)
-                self.progress_label.setText(f"Complete: {total} / {total}")
-                if not is_step:
-                    self.auto_send_complete()
-                else:
-                    self.log_message("All segments sent successfully", "info")
-                    self.step_send_btn.setEnabled(True)
-
-        elif self.validation_failed:
-            # 驗證失敗，stop auto 已在 display_received_data 處理
-            if is_step:
+                # Step mode: re-enable button for user to click
+                self.step_send_btn.setEnabled(True)
+                self.waiting_for_reply = False
+        else:
+            # All segments sent
+            total = len(self.file_segments)
+            self.progress_label.setText(f"Complete: {total} / {total}")
+            if not self.is_step_mode:
+                self.auto_send_complete()
+            else:
+                self.log_message("All segments sent successfully", "info")
                 self.step_send_btn.setEnabled(True)
 
+            self.waiting_for_reply = False
+
+    def check_reply_timeout(self):
+        # Called when timeout occurs (no reply received within 2 seconds)
+        if self.reply_received:
+            # Reply was already processed, nothing to do
+            return
+
+        if self.validation_failed:
+            # Validation failed, stop auto already handled in display_received_data
+            if self.is_step_mode:
+                self.step_send_btn.setEnabled(True)
         else:
-            # timeout
+            # Timeout - no response received
             self.log_message(
                 f"Timeout: No response for block {self.current_segment_index + 1}",
                 "error",
             )
-            if not is_step:
+            if not self.is_step_mode:
                 self.stop_auto_send()
             else:
                 self.step_send_btn.setEnabled(True)
@@ -820,6 +844,11 @@ class RS485SerialToolWindow(QMainWindow):
         self.waiting_for_reply = False
         self.reply_received = False
         self.validation_failed = False
+
+        # Cancel any pending timeout timer
+        if self.reply_timeout_timer and self.reply_timeout_timer.isActive():
+            self.reply_timeout_timer.stop()
+
         self.auto_send_btn.setEnabled(True)
         self.step_send_btn.setEnabled(True)
         self.stop_auto_btn.setEnabled(False)
@@ -850,12 +879,28 @@ class RS485SerialToolWindow(QMainWindow):
             if valid:
                 self.reply_received = True
                 self.validation_failed = False
+
+                # Cancel the timeout timer since we got a valid reply
+                if self.reply_timeout_timer and self.reply_timeout_timer.isActive():
+                    self.reply_timeout_timer.stop()
+
+                # Process the successful reply immediately with 100ms delay
+                QTimer.singleShot(100, self.process_successful_reply)
             else:
                 self.reply_received = False
                 self.validation_failed = True
                 self.log_message(f"Response error: {error_msg}", "error")
+
+                # Cancel the timeout timer
+                if self.reply_timeout_timer and self.reply_timeout_timer.isActive():
+                    self.reply_timeout_timer.stop()
+
                 if self.auto_send_running:
                     self.stop_auto_send()
+                elif self.is_step_mode:
+                    self.step_send_btn.setEnabled(True)
+
+                self.waiting_for_reply = False
 
     def validate_response(self, data: bytes):
         """
