@@ -302,7 +302,7 @@ class RS485SerialToolWindow(QMainWindow):
         layout.addWidget(QLabel("Data / Current Segment (ASCII Text):"))
         self.segment_edit = QTextEdit()
         self.segment_edit.setPlaceholderText("Enter ASCII text (not HEX)")
-        self.segment_edit.setFixedHeight(120)  # Increased from 80
+        self.segment_edit.setFixedHeight(80)  # Increased from 80
         self.segment_edit.textChanged.connect(self.update_block_length_display)
         layout.addWidget(self.segment_edit)
 
@@ -349,7 +349,7 @@ class RS485SerialToolWindow(QMainWindow):
 
         self.log_edit = QPlainTextEdit()
         self.log_edit.setReadOnly(True)
-        self.log_edit.setMinimumHeight(300)  # Increase height
+        self.log_edit.setMinimumHeight(220)  # Increase height
         vbox.addWidget(self.log_edit)
 
         btn_layout = QHBoxLayout()
