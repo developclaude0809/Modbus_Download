@@ -190,6 +190,7 @@ class RS485SerialToolWindow(QMainWindow):
 
         self.quick_test_input = QTextEdit()
         self.quick_test_input.setPlaceholderText("輸入 HEX 或 ASCII 測試資料")
+        self.quick_test_input.setMaximumHeight(50)  # Reduce height
         vbox.addWidget(self.quick_test_input)
 
         btn_layout = QHBoxLayout()
@@ -256,43 +257,53 @@ class RS485SerialToolWindow(QMainWindow):
     # --------------------- Input Group ---------------------------------
     def _create_input_group(self) -> QGroupBox:
         group = QGroupBox("HEX Input (0-9, A-F only)", self)
-        layout = QGridLayout(group)
-        layout.setRowStretch(0, 1)
-        layout.setColumnStretch(3, 1)
+        layout = QVBoxLayout(group)
+
+        # Row 1: Prefix, Block, Length (horizontal layout)
+        row1_layout = QHBoxLayout()
 
         # Prefix
-        prefix_label = QLabel("Prefix:")
+        prefix_vbox = QVBoxLayout()
+        prefix_vbox.addWidget(QLabel("Prefix:"))
         self.prefix_edit = QTextEdit()
-        self.prefix_edit.setFixedHeight(80)
-        layout.addWidget(prefix_label, 0, 0)
-        layout.addWidget(self.prefix_edit, 1, 0)
+        self.prefix_edit.setFixedHeight(30)  # Decreased from 60
+        self.prefix_edit.setFixedWidth(150)
+        prefix_vbox.addWidget(self.prefix_edit)
+        row1_layout.addLayout(prefix_vbox)
 
         # Block #
-        block_label = QLabel("Block #:")
+        block_vbox = QVBoxLayout()
+        block_vbox.addWidget(QLabel("Block #:"))
         self.block_display = QLineEdit()
         self.block_display.setReadOnly(True)
-        self.block_display.setFixedHeight(30)
+        self.block_display.setFixedHeight(30)  # Decreased from 60
+        self.block_display.setFixedWidth(100)
         self.block_display.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        layout.addWidget(block_label, 0, 1)
-        layout.addWidget(self.block_display, 1, 1)
+        self.block_display.setStyleSheet("background-color: #f0f0f0;")
+        block_vbox.addWidget(self.block_display)
+        row1_layout.addLayout(block_vbox)
 
         # Length
-        length_label = QLabel("Length:")
+        length_vbox = QVBoxLayout()
+        length_vbox.addWidget(QLabel("Length:"))
         self.length_display = QLineEdit()
         self.length_display.setReadOnly(True)
-        self.length_display.setFixedHeight(30)
-        layout.addWidget(length_label, 0, 2)
-        layout.addWidget(self.length_display, 1, 2)
+        self.length_display.setFixedHeight(30)  # Decreased from 60
+        self.length_display.setFixedWidth(100)
+        self.length_display.setStyleSheet("background-color: #f0f0f0;")
+        length_vbox.addWidget(self.length_display)
+        row1_layout.addLayout(length_vbox)
 
-        # Segment data
-        data_label = QLabel("Data / Current Segment:")
+        row1_layout.addStretch()
+        layout.addLayout(row1_layout)
+
+        # Row 2: Segment data (now ASCII text, not HEX)
+        layout.addWidget(QLabel("Data / Current Segment (ASCII Text):"))
         self.segment_edit = QTextEdit()
-        self.segment_edit.setPlaceholderText("目前段資料或手動輸入 HEX")
-        self.segment_edit.setFixedHeight(100)
+        self.segment_edit.setPlaceholderText("Enter ASCII text (not HEX)")
+        self.segment_edit.setFixedHeight(120)  # Increased from 80
         self.segment_edit.textChanged.connect(self.update_block_length_display)
-
-        layout.addWidget(data_label, 0, 3)
-        layout.addWidget(self.segment_edit, 1, 3)
+        layout.addWidget(self.segment_edit)
 
         # Buttons row
         btn_layout = QHBoxLayout()
@@ -324,7 +335,7 @@ class RS485SerialToolWindow(QMainWindow):
         self.progress_label = QLabel("")
         btn_layout.addWidget(self.progress_label)
 
-        layout.addLayout(btn_layout, 2, 0, 1, 4)
+        layout.addLayout(btn_layout)
 
         self.update_block_length_display()
 
@@ -337,6 +348,7 @@ class RS485SerialToolWindow(QMainWindow):
 
         self.log_edit = QPlainTextEdit()
         self.log_edit.setReadOnly(True)
+        self.log_edit.setMinimumHeight(300)  # Increase height
         vbox.addWidget(self.log_edit)
 
         btn_layout = QHBoxLayout()
@@ -531,22 +543,14 @@ class RS485SerialToolWindow(QMainWindow):
             return
 
         try:
+            # Read file as plain text (not HEX)
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
-            cleaned = (
-                content.replace(" ", "")
-                .replace("\t", "")
-                .replace("\n", "")
-                .replace("\r", "")
-            )
 
-            if cleaned and not all(c in "0123456789ABCDEFabcdef" for c in cleaned):
-                QMessageBox.critical(self, "Invalid Data", "File contains non-HEX characters.")
-                return
-
+            # Split into text chunks (no HEX validation)
             self.file_segments = []
-            for i in range(0, len(cleaned), chunk_size):
-                seg = cleaned[i : i + chunk_size]
+            for i in range(0, len(content), chunk_size):
+                seg = content[i : i + chunk_size]
                 self.file_segments.append(seg)
 
             self.current_segment_index = 0
@@ -554,14 +558,14 @@ class RS485SerialToolWindow(QMainWindow):
             if self.file_segments:
                 self.segment_edit.setPlainText(self.file_segments[0])
                 total_segments = len(self.file_segments)
-                total_chars = len(cleaned)
+                total_chars = len(content)
                 self.file_status_label.setText(
                     f"Loaded: {total_segments} segments, {total_chars} chars total"
                 )
                 self.progress_label.setText(f"Segment 1 / {total_segments}")
                 self.update_block_length_display()
                 self.log_message(
-                    f"File loaded: {total_segments} segments of {chunk_size} chars each",
+                    f"File loaded: {total_segments} text segments of {chunk_size} chars each",
                     "info",
                 )
             else:
@@ -583,19 +587,16 @@ class RS485SerialToolWindow(QMainWindow):
         self.progress_label.clear()
 
     def update_block_length_display(self):
-        # 目前 segment 用來算 length
-        segment_text = self.segment_edit.toPlainText().strip()
-        segment_clean = (
-            segment_text.replace(" ", "")
-            .replace("\t", "")
-            .replace("\n", "")
-            .replace("\r", "")
-        )
+        # Data Segment is now treated as ASCII text, not HEX
+        segment_text = self.segment_edit.toPlainText()
 
-        if segment_clean and all(c in "0123456789ABCDEFabcdef" for c in segment_clean):
-            length_bytes = len(segment_clean) // 2
-        else:
-            length_bytes = 0
+        # Calculate length based on ASCII encoding
+        try:
+            data_bytes = segment_text.encode("ascii")
+            length_bytes = len(data_bytes)
+        except UnicodeEncodeError:
+            # If non-ASCII characters, just use byte length
+            length_bytes = len(segment_text.encode("utf-8"))
 
         block_hex = f"{self.current_segment_index:04X}"
         length_hex = f"{length_bytes:04X}"
@@ -608,31 +609,46 @@ class RS485SerialToolWindow(QMainWindow):
             QMessageBox.warning(self, "Not Connected", "Please connect to a serial port first.")
             return
 
+        # Prefix is HEX, Segment is ASCII text
         prefix = self.prefix_edit.toPlainText().strip()
-        segment = self.segment_edit.toPlainText().strip()
+        segment_text = self.segment_edit.toPlainText()
 
-        hex_str = (prefix + segment).replace(" ", "").replace("\t", "").replace("\n", "").replace("\r", "")
-        if not hex_str:
-            QMessageBox.warning(self, "Empty Input", "Please enter HEX data to send.")
-            return
+        # Validate and convert prefix (HEX)
+        prefix_clean = prefix.replace(" ", "").replace("\t", "").replace("\n", "").replace("\r", "")
 
-        if not all(c in "0123456789ABCDEFabcdef" for c in hex_str):
-            QMessageBox.critical(self, "Invalid HEX", "Input must contain only HEX characters (0-9, A-F).")
-            return
+        if prefix_clean:
+            if not all(c in "0123456789ABCDEFabcdef" for c in prefix_clean):
+                QMessageBox.critical(self, "Invalid HEX", "Prefix must contain only HEX characters (0-9, A-F).")
+                return
+            if len(prefix_clean) % 2 != 0:
+                QMessageBox.critical(self, "Invalid HEX", "Prefix must have an even number of characters.")
+                return
+            prefix_bytes = bytes.fromhex(prefix_clean)
+        else:
+            prefix_bytes = b""
 
-        if len(hex_str) % 2 != 0:
-            QMessageBox.critical(self, "Invalid HEX", "HEX string must have an even number of characters.")
+        # Convert segment text to ASCII bytes
+        if not segment_text:
+            QMessageBox.warning(self, "Empty Input", "Please enter data to send.")
             return
 
         try:
-            data_bytes = bytes.fromhex(hex_str)
-            crc = CRC16Modbus.calculate(data_bytes)
-            crc_bytes = CRC16Modbus.to_bytes_le(crc)
-            final_data = data_bytes + crc_bytes
+            data_bytes = segment_text.encode("ascii")
+        except UnicodeEncodeError:
+            QMessageBox.critical(self, "ASCII Error", "Segment contains non-ASCII characters.")
+            return
 
+        # Build packet: prefix + data
+        packet_data = prefix_bytes + data_bytes
+
+        # Calculate and append CRC
+        crc = CRC16Modbus.calculate(packet_data)
+        crc_bytes = CRC16Modbus.to_bytes_le(crc)
+        final_data = packet_data + crc_bytes
+
+        try:
             self.serial_port.write(final_data)
             self.log_message(f"TX: {final_data.hex().upper()}", "tx")
-
         except Exception as e:
             QMessageBox.critical(self, "Send Error", str(e))
             self.log_message(f"Send error: {e}", "error")
@@ -696,8 +712,9 @@ class RS485SerialToolWindow(QMainWindow):
     def send_current_segment(self) -> bool:
         try:
             prefix = self.prefix_edit.toPlainText().strip()
-            segment = self.file_segments[self.current_segment_index]
+            segment_text = self.file_segments[self.current_segment_index]
 
+            # Validate and convert prefix (HEX)
             prefix_clean = (
                 prefix.replace(" ", "")
                 .replace("\t", "")
@@ -716,19 +733,19 @@ class RS485SerialToolWindow(QMainWindow):
             else:
                 prefix_bytes = b""
 
-            if not all(c in "0123456789ABCDEFabcdef" for c in segment):
-                QMessageBox.critical(self, "Invalid HEX", "Segment contains non-HEX characters.")
-                return False
-            if len(segment) % 2 != 0:
-                QMessageBox.critical(self, "Invalid HEX", "Segment has odd length.")
+            # Convert segment text to ASCII bytes (no HEX validation)
+            try:
+                data_bytes = segment_text.encode("ascii")
+            except UnicodeEncodeError:
+                QMessageBox.critical(self, "ASCII Error", "Segment contains non-ASCII characters.")
                 return False
 
-            data_bytes = bytes.fromhex(segment)
-
+            # Build packet format: [prefix][block][length][data][crc]
             block_number = self.current_segment_index
             block_bytes = block_number.to_bytes(2, byteorder="big")
 
-            length_bytes = len(data_bytes).to_bytes(2, byteorder="big")
+            length = len(data_bytes)
+            length_bytes = length.to_bytes(2, byteorder="big")
 
             packet_without_crc = prefix_bytes + block_bytes + length_bytes + data_bytes
 
@@ -877,14 +894,30 @@ class RS485SerialToolWindow(QMainWindow):
     def log_message(self, message: str, tag: str = "info"):
         timestamp = time.strftime("%H:%M:%S")
 
-        if message.startswith("TX: ") or message.startswith("RX: "):
+        # Define colors for different message types
+        color_map = {
+            "tx": "#0066CC",      # Blue for transmit
+            "rx": "#009900",      # Green for receive
+            "error": "#CC0000",   # Red for errors
+            "info": "#666666"     # Gray for info
+        }
+
+        if message.startswith("TX: "):
             direction = message[:2]
             content = message[4:]
-            line = f"[{timestamp}][{direction}]: {content}"
+            color = color_map.get("tx", "#000000")
+            line = f'<span style="color: #666666;">[{timestamp}]</span><span style="color: {color};">[{direction}]: {content}</span>'
+        elif message.startswith("RX: "):
+            direction = message[:2]
+            content = message[4:]
+            color = color_map.get("rx", "#000000")
+            line = f'<span style="color: #666666;">[{timestamp}]</span><span style="color: {color};">[{direction}]: {content}</span>'
         else:
-            line = f"[{timestamp}] {message}"
+            # For other messages (info, error), use the tag parameter
+            color = color_map.get(tag, "#000000")
+            line = f'<span style="color: #666666;">[{timestamp}]</span> <span style="color: {color};">{message}</span>'
 
-        self.log_edit.appendPlainText(line)
+        self.log_edit.appendHtml(line)
         self.log_edit.moveCursor(self.log_edit.textCursor().End)
 
     # ------------------------------------------------------------------
