@@ -241,17 +241,22 @@ class RS485SerialToolWindow(QMainWindow):
 
         # Chunk size
         layout.addWidget(QLabel("Chunk Size (chars):"), 1, 0)
-        self.chunk_size_edit = QLineEdit("100")
+        self.chunk_size_edit = QLineEdit("1024")
         layout.addWidget(self.chunk_size_edit, 1, 1)
 
         self.load_file_btn = QPushButton("Load & Split")
         self.load_file_btn.clicked.connect(self.load_and_split_file)
         layout.addWidget(self.load_file_btn, 1, 2)
 
+        # Reply delay
+        layout.addWidget(QLabel("Reply Delay (ms):"), 2, 0)
+        self.reply_delay_edit = QLineEdit("100")
+        layout.addWidget(self.reply_delay_edit, 2, 1)
+
         # Status
         self.file_status_label = QLabel("No file loaded")
         self.file_status_label.setStyleSheet("color: gray;")
-        layout.addWidget(self.file_status_label, 2, 0, 1, 3)
+        layout.addWidget(self.file_status_label, 3, 0, 1, 3)
 
         return group
 
@@ -884,8 +889,16 @@ class RS485SerialToolWindow(QMainWindow):
                 if self.reply_timeout_timer and self.reply_timeout_timer.isActive():
                     self.reply_timeout_timer.stop()
 
-                # Process the successful reply immediately with 100ms delay
-                QTimer.singleShot(100, self.process_successful_reply)
+                # Get user-defined reply delay
+                try:
+                    delay_ms = int(self.reply_delay_edit.text())
+                    if delay_ms < 0:
+                        delay_ms = 100
+                except ValueError:
+                    delay_ms = 100
+
+                # Process the successful reply with user-defined delay
+                QTimer.singleShot(delay_ms, self.process_successful_reply)
             else:
                 self.reply_received = False
                 self.validation_failed = True
